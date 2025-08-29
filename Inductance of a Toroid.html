@@ -1,0 +1,95 @@
+
+<!-- saved from url=(0063)http://hyperphysics.phy-astr.gsu.edu/hbase/magnetic/indtor.html -->
+<html><head><meta http-equiv="Content-Type" content="text/html; charset=windows-1252"> 
+   <title>Inductance of a Toroid</title>
+</head>
+<body bgcolor="#FFE4C8">
+<!-- Copyright 2000 by Carl Rod Nave, RodNave@gsu.edu-->
+
+
+<a name="c1"></a>
+<table width="680" height="370" border="1" cellspacing="2" cellpadding="2">
+<tbody><tr>
+<td width="614" height="309">
+
+
+<table><tbody><tr><td>
+<center><img src="./Inductance of a Toroid_files/tor.gif"></center>
+</td><td>
+<h1 align="center">Approximate Inductance of a Toroid</h1>
+<p>Finding the <a href="http://hyperphysics.phy-astr.gsu.edu/hbase/magnetic/magfie.html#c1"> magnetic field</a> inside a <a href="http://hyperphysics.phy-astr.gsu.edu/hbase/magnetic/toroid.html#c1">toroid</a> is a good example of the power of <a href="http://hyperphysics.phy-astr.gsu.edu/hbase/magnetic/amplaw.html#c1">Ampere's law</a>. The current enclosed by the dashed line is just the number of loops times the current in each loop. Amperes law then gives the magnetic field at the centerline of the toroid as </p>
+<center><img src="./Inductance of a Toroid_files/tor2.gif"></center>
+
+<p>The <a href="http://hyperphysics.phy-astr.gsu.edu/hbase/electric/induct.html#c1">inductance</a> can be calculated in a manner similar to that for any <a href="http://hyperphysics.phy-astr.gsu.edu/hbase/electric/induct.html#c1">coil of wire</a>. </p> 
+
+</td></tr></tbody></table>
+<p>The application of <a href="http://hyperphysics.phy-astr.gsu.edu/hbase/electric/farlaw.html#c1">Faraday's law</a> to calculate the voltage induced in the toroid is of the form</p>
+
+<center><img src="./Inductance of a Toroid_files/indcur4.gif"></center>
+<p>This can be used with the magnetic field expression above to obtain an expression for the inductance.</p>
+
+<center><img src="./Inductance of a Toroid_files/indtor.gif"></center>
+
+<script language="JavaScript">
+function lcal(){fh=document.forms[0];def();nn=fh.n.value;mm=4*Math.PI*Math.pow(10,-7);kk=fh.k.value;aa=fh.a.value*Math.pow(10,-4);ll=2*Math.PI*fh.l.value/100; iind = mm*kk*nn*nn*aa/ll;fh.ind.value=display(iind);fh.indm.value=display(1000*iind)}
+
+
+
+
+function ru(r){fh=document.forms[0];fh.a.value=Math.PI*r*r;lcal()}
+
+function au(a){fh=document.forms[0];fh.r.value=Math.sqrt(a/Math.PI);lcal()}
+
+
+
+// <!--default values are set for parameters which have zero values-->
+function def(){fh=document.forms[0];if (fh.l.value==0)fh.l.value=10;if (fh.r.value==0)fh.r.value=1;if (fh.a.value==0)fh.a.value=Math.PI;if (fh.k.value==0)fh.k.value=200;if (fh.n.value==0)fh.n.value=200}
+
+// <!--display(x) checks to see if a number is too small or too large to fit in a 6-space field, and if so, displays ellipsis ...-->
+function display(x){xx=x;if(x<Math.pow(10,-4))xx="...";if(x>.99*Math.pow(10,5))xx="...";return  xx}
+
+</script>
+
+
+<form method="" action="http://hyperphysics.phy-astr.gsu.edu/hbase/magnetic/indtor.html">
+
+<p>Toroidal radius r =<input type="text" name="l" value="" size="6" onchange="lcal()"> cm with <font size="+2">N</font> = <input type="text" name="n" value="" size="6" onchange="lcal()">turns,</p><p> Coil radius =<input type="text" name="r" value="" size="6" onchange="ru(this.value)"> cm gives area A = <input type="text" name="a" value="" size="6" onchange="au(this.value)"> cm<sup>2</sup>.</p>
+
+<p>Relative <a href="http://hyperphysics.phy-astr.gsu.edu/hbase/solids/ferro.html#c5">permeability</a> of the core  k = <input type="text" name="k" value="" size="6" onchange="lcal()">, </p>
+<p>Then the inductance of the toroid is approximately</p>
+<p> <font size="+2">L</font> =  <input type="text" name="ind" value="" size="6" onchange="onChange=lcal()"> Henry =  <input type="text" name="indm" value="" size="6" onchange="onChange=lcal()">mH.</p>
+</form>                
+<p>This is a single purpose calculation which gives you the inductance value when you make any change in the parameters.</p>
+<p>Small inductors for electronics use may be made with air cores. For larger values of inductance and for transformers, iron is used as a core material.  The relative permeability of magnetic iron is around 200.</p>
+<p>This calculation is approximate because the magnetic field changes with the radius from the centerline of the toroid. Using the centerline value for magnetic field as an average introduces an error which is small if the toroid radius is much larger than the coil radius.  </p>
+
+
+<center><table border="1" cellspacing="2" cellpadding="2"><tbody><tr><td><a href="http://hyperphysics.phy-astr.gsu.edu/hbase/electric/indsol.html#c1">Inductance of a solenoid</a></td><td></td></tr></tbody></table></center>   
+ 
+</td>
+<td width="66" align="center"><a href="http://hyperphysics.phy-astr.gsu.edu/hbase/hframe.html">Index</a><br><br><a href="http://hyperphysics.phy-astr.gsu.edu/hbase/magnetic/magcon.html#c1">Magnetic field concepts</a></td></tr>
+<tr>
+<td height="17">&nbsp;<table><tbody><tr><td width="450"><a href="http://hyperphysics.phy-astr.gsu.edu/hbase/hph.html"> HyperPhysics</a>*****<a href="http://hyperphysics.phy-astr.gsu.edu/hbase/emcon.html#emcon">     Electricity and Magnetism </a></td><td align="right"><font size="-1"><i>R Nave</i></font></td></tr></tbody></table></td>
+<td><a href="Javascript:history.go(-1)">Go Back</a></td></tr>
+</tbody></table>
+<br>
+<br>
+<br>
+<br>
+<br>
+
+
+<br>
+<br>
+<br>
+<br>
+<br>
+<br>
+
+<br>
+<br>
+<br>
+<br>
+<br>
+
+</body></html>
