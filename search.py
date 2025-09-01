@@ -1,6 +1,6 @@
 # search.py
 from dataclasses import dataclass
-from math import ceil
+from math import ceil, pi
 from typing import Iterable
 from models import Core, Coil
 from physics import toroid_inductance_h, turns_for_target, mean_turn_length_m, flux_density_t
@@ -17,6 +17,10 @@ class DesignOption:
     resistance_ohm: float
     cost_usd: float
     score: float
+    # Added: window usage metrics
+    window_area_m2: float
+    leftover_window_area_m2: float
+    fill_ratio: float
 
 def find_combinations(
     L_target_h: float,
@@ -50,11 +54,22 @@ def find_combinations(
                 wire_length = N * mean_turn_length_m(core)
                 resistance = coil.resistance_per_m_ohm * wire_length
                 cost = core.price_usd + coil.base_price_usd + (coil.price_per_m_usd * wire_length)
-                score = score_combo(rel_error, cost, resistance, weights)
+
+                # Window usage metrics
+                window_area = pi * ((getattr(core, "id_m", None) or 0.0) / 2) ** 2 if getattr(core, "id_m", None) else core.window_area_m2
+                effective_diameter = coil.wire_diameter_m + 2 * max(0.0, getattr(coil, "enamel_thickness_m", 0.0))
+                wire_area = pi * (effective_diameter / 2) ** 2
+                # Required total geometric area given packing factor
+                required_total_area = (N * wire_area) / max(1e-9, coil.packing_factor)
+                leftover_total_area = max(0.0, window_area - required_total_area)
+                used_fraction = 0.0 if window_area <= 0 else min(1.0, (required_total_area / window_area))
+                # Recompute score with fill penalty preference (75-85% default from weights)
+                score = score_combo(rel_error, cost, resistance, weights, fill_ratio=used_fraction)
 
                 results.append(DesignOption(
                     core=core, coil=coil, turns=N, L_h=L_actual, rel_error=rel_error,
-                    wire_length_m=wire_length, resistance_ohm=resistance, cost_usd=cost, score=score
+                    wire_length_m=wire_length, resistance_ohm=resistance, cost_usd=cost, score=score,
+                    window_area_m2=window_area, leftover_window_area_m2=leftover_total_area, fill_ratio=used_fraction
                 ))
 
     results.sort(key=lambda d: (d.score, d.cost_usd, d.rel_error))
