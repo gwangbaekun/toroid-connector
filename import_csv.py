@@ -4,10 +4,11 @@
 from __future__ import annotations
 
 import csv
+import io
 from dataclasses import dataclass
 from math import pi
 from pathlib import Path
-from typing import Iterable
+from typing import Iterable, Union, TextIO, Any
 
 from models import Core
 from physics import MU0
@@ -38,23 +39,33 @@ def _to_float(value: str | None) -> float | None:
         return None
 
 
-def _parse_csv_rows(path: str | Path) -> list[ParsedRow]:
+def _parse_csv_rows(source: Union[str, Path, TextIO, bytes, bytearray]) -> list[ParsedRow]:
     rows: list[ParsedRow] = []
-    with open(path, newline="", encoding="utf-8") as f:
+    # Normalize source to a file-like reader
+    close_after = False
+    if isinstance(source, (str, Path)):
+        f: TextIO = open(source, newline="", encoding="utf-8")
+        close_after = True
+    elif hasattr(source, "read"):
+        f = source  # type: ignore[assignment]
+    else:
+        if isinstance(source, (bytes, bytearray)):
+            f = io.StringIO(source.decode("utf-8"))
+        else:
+            f = io.StringIO(str(source))
+        close_after = True
+
+    try:
         reader = csv.reader(f)
         for raw in reader:
-            # Expect lines like:
-            # [, PartNo, AL26, AL60, AL125, path_cm, area_cm2, OD_b, ID_b, HT_b, OD_a, ID_a, HT_a]
             if not raw:
                 continue
-            # Skip header rows that don't start with a part number
             if len(raw) < 13:
                 continue
             part = (raw[1] or "").strip()
             if not part or part.startswith("Part No") or part.startswith("Nominal"):
                 continue
             if not part.upper().startswith("CH"):
-                # Likely a header or footer
                 continue
 
             al26 = _to_float(raw[2])
@@ -62,7 +73,6 @@ def _parse_csv_rows(path: str | Path) -> list[ParsedRow]:
             al125 = _to_float(raw[4])
             path_cm = _to_float(raw[5]) or 0.0
             area_cm2 = _to_float(raw[6]) or 0.0
-            # After-finish dims (prefer for final geometry)
             od_a_mm = _to_float(raw[10]) or 0.0
             id_a_mm = _to_float(raw[11]) or 0.0
             ht_a_mm = _to_float(raw[12]) or 0.0
@@ -80,6 +90,12 @@ def _parse_csv_rows(path: str | Path) -> list[ParsedRow]:
                     ht_after_m=ht_a_mm * 1e-3,
                 )
             )
+    finally:
+        if close_after:
+            try:
+                f.close()
+            except Exception:
+                pass
     return rows
 
 
@@ -91,8 +107,8 @@ def _mu_r_from_al(al_nH_per_N2: float, area_m2: float, path_m: float) -> float:
     return max(1.0, (al_H * path_m) / (MU0 * area_m2))
 
 
-def cores_from_high_flux_csv(path: str | Path) -> list[Core]:
-    parsed = _parse_csv_rows(path)
+def cores_from_high_flux_csv(source: Union[str, Path, TextIO, bytes, bytearray]) -> list[Core]:
+    parsed = _parse_csv_rows(source)
     cores: list[Core] = []
     for r in parsed:
         # Compute r_mean from given path length, independent of OD/ID
@@ -127,8 +143,8 @@ def cores_from_high_flux_csv(path: str | Path) -> list[Core]:
     return cores
 
 
-def summarize_csv(path: str | Path) -> str:
-    rows = _parse_csv_rows(path)
+def summarize_csv(source: Union[str, Path, TextIO, bytes, bytearray]) -> str:
+    rows = _parse_csv_rows(source)
     total = len(rows)
     if total == 0:
         return "No rows parsed. Check CSV formatting."
