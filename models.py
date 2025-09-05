@@ -72,22 +72,30 @@ class Coil:
 	enamel_thickness_m: float = 0.0  # single-side enamel thickness [m]
 
 	def max_turns_on(self, core: Core) -> int:
-		# Approximate max turns from window fill using effective wire diameter
-		# Effective diameter = bare + 2 * enamel
-		effective_diameter = self.wire_diameter_m + 2 * max(0.0, self.enamel_thickness_m)
-		wire_area = pi * (effective_diameter / 2) ** 2
-		# Prefer window area computed from ID when dimensions are available
-		if core.id_m is not None:
-			window_area = pi * (core.id_m / 2) ** 2
+		# IWM-style layered capacity:
+		# - overall wire (pitch): d_eff = bare + 2*enamel
+		# - turns per layer (along height): TPL = floor(HT / d_eff)
+		# - max radial layers: Lmax = floor(((OD - ID)/2) / d_eff)
+		# - capacity = Lmax * TPL
+		d_eff = self.wire_diameter_m + 2 * max(0.0, self.enamel_thickness_m)
+
+		# Get core dims (prefer explicit; else derive)
+		if core.id_m is not None and core.od_m is not None and core.ht_m is not None:
+			ID, OD, HT = core.id_m, core.od_m, core.ht_m
 		else:
 			derived = core._derive_dimensions_from_fields()
-			if derived is not None:
-				_od_m, id_m, _ht_m = derived
-				window_area = pi * (id_m / 2) ** 2
-			else:
-				window_area = core.window_area_m2
+			if derived is None:
+				return 0
+			OD, ID, HT = derived
 
-		usable_area = window_area * self.packing_factor
-		if wire_area <= 0:
+		if d_eff <= 0 or ID <= 0 or OD <= ID or HT <= 0:
 			return 0
-		return max(0, floor(usable_area / wire_area))
+
+		tpl = floor(HT / d_eff)
+		if tpl <= 0:
+			return 0
+		layers_radial = floor(((OD - ID) / 2.0) / d_eff)
+		if layers_radial <= 0:
+			return 0
+
+		return max(0, tpl * layers_radial)

@@ -1,6 +1,6 @@
 # search.py
 from dataclasses import dataclass
-from math import ceil, pi
+from math import ceil, pi, floor
 from typing import Iterable
 from models import Core, Coil
 from physics import toroid_inductance_h, turns_for_target, mean_turn_length_m, flux_density_t
@@ -51,19 +51,32 @@ def find_combinations(
                     if flux_density_t(core, N, working_current_a) > core.b_sat_t:
                         continue
 
-                wire_length = N * mean_turn_length_m(core)
+                # wire_length = N * mean_turn_length_m(core)
+                # resistance = coil.resistance_per_m_ohm * wire_length
+                # cost = core.price_usd + coil.base_price_usd + (coil.price_per_m_usd * wire_length)
+
+                # # Window usage metrics
+                # window_area = pi * ((getattr(core, "id_m", None) or 0.0) / 2) ** 2 if getattr(core, "id_m", None) else core.window_area_m2
+                # effective_diameter = coil.wire_diameter_m + 2 * max(0.0, getattr(coil, "enamel_thickness_m", 0.0))
+                # wire_area = pi * (effective_diameter / 2) ** 2
+                # # Required total geometric area given packing factor
+                # required_total_area = (N * wire_area) / max(1e-9, coil.packing_factor)
+                # leftover_total_area = max(0.0, window_area - required_total_area)
+                # used_fraction = 0.0 if window_area <= 0 else min(1.0, (required_total_area / window_area))
+                # # Recompute score with fill penalty preference (75-85% default from weights)
+                # score = score_combo(rel_error, cost, resistance, weights, fill_ratio=used_fraction)
+
+                wire_length, layers_used, finished_id_m, finished_od_m, cap_turns = layered_wire_length(core, coil, N)
                 resistance = coil.resistance_per_m_ohm * wire_length
                 cost = core.price_usd + coil.base_price_usd + (coil.price_per_m_usd * wire_length)
 
-                # Window usage metrics
+                # Window/usage metrics from layered capacity
                 window_area = pi * ((getattr(core, "id_m", None) or 0.0) / 2) ** 2 if getattr(core, "id_m", None) else core.window_area_m2
-                effective_diameter = coil.wire_diameter_m + 2 * max(0.0, getattr(coil, "enamel_thickness_m", 0.0))
-                wire_area = pi * (effective_diameter / 2) ** 2
-                # Required total geometric area given packing factor
-                required_total_area = (N * wire_area) / max(1e-9, coil.packing_factor)
-                leftover_total_area = max(0.0, window_area - required_total_area)
-                used_fraction = 0.0 if window_area <= 0 else min(1.0, (required_total_area / window_area))
-                # Recompute score with fill penalty preference (75-85% default from weights)
+                # Prefer a usage metric aligned with layered model: fraction of capacity
+                used_fraction = 0.0 if cap_turns <= 0 else min(1.0, N / cap_turns)
+                leftover_total_area = window_area * max(0.0, 1.0 - used_fraction)
+
+                # Recompute score with fill preference
                 score = score_combo(rel_error, cost, resistance, weights, fill_ratio=used_fraction)
 
                 results.append(DesignOption(
@@ -74,3 +87,52 @@ def find_combinations(
 
     results.sort(key=lambda d: (d.score, d.cost_usd, d.rel_error))
     return results[:max_results]
+
+
+
+# Add in search.py (below imports)
+def layered_wire_length(core: Core, coil: Coil, N: int) -> tuple[float, int, float, float, int]:
+    """
+    IWM-style wire length and capacity at overall wire pitch.
+    Returns: (wire_length_m, layers_used, finished_id_m, finished_od_m, capacity_turns)
+    """
+    d_eff = coil.wire_diameter_m + 2 * max(0.0, getattr(coil, "enamel_thickness_m", 0.0))
+
+    # Resolve core dimensions
+    if core.id_m is not None and core.od_m is not None and core.ht_m is not None:
+        ID, OD, HT = core.id_m, core.od_m, core.ht_m
+    else:
+        derived = core._derive_dimensions_from_fields()
+        if derived is None:
+            return 0.0, 0, getattr(core, "id_m", 0.0) or 0.0, getattr(core, "od_m", 0.0) or 0.0, 0
+        OD, ID, HT = derived
+
+    if d_eff <= 0 or ID <= 0 or OD <= ID or HT <= 0:
+        return 0.0, 0, ID, OD, 0
+
+    tpl = floor(HT / d_eff)               # turns per layer at wire pitch (height direction)
+    layers_radial = floor(((OD - ID) / 2.0) / d_eff)
+    if tpl <= 0 or layers_radial <= 0:
+        return 0.0, 0, ID, OD, 0
+
+    capacity = tpl * layers_radial
+    turns_needed = int(max(0, min(N, capacity)))
+
+    length = 0.0
+    remaining = turns_needed
+    layers_used = 0
+
+    # Distribute turns across layers; layer k (1-indexed) mid diameter Dk = ID + d_eff*(2k-1)
+    for k in range(1, layers_radial + 1):
+        if remaining <= 0:
+            break
+        turns_k = min(tpl, remaining)
+        Dk = ID + d_eff * (2 * k - 1)
+        length += turns_k * (pi * Dk)
+        remaining -= turns_k
+        layers_used += 1
+
+    finished_id = max(0.0, ID - 2.0 * d_eff * layers_used)
+    finished_od = OD + 2.0 * d_eff * layers_used
+
+    return length, layers_used, finished_id, finished_od, capacity
