@@ -9,6 +9,48 @@ from import_csv import cores_from_high_flux_csv, _parse_csv_rows
 from models import Coil
 from search import find_combinations
 
+import math
+
+def iwm_calc(OD_mm: float, ID_mm: float, HT_mm: float, NT: int, WG_mm: float) -> dict:
+    # JS: len = OD - ID + (2*HT)
+    len_per_turn_mm = OD_mm - ID_mm + (2.0 * HT_mm)
+    total_len_mm = len_per_turn_mm * NT
+    total_len_m = total_len_mm / 1000.0
+    total_len_ft = total_len_mm / 304.8
+
+    # JS: tpl = round(((ID*Math.PI)/WG)*100)/100
+    if WG_mm <= 0 or ID_mm <= 0:
+        tpl = float("inf")  # IWM의 Infinity 표시와 동일한 상황
+    else:
+        tpl = round(((ID_mm * math.pi) / WG_mm), 2)
+
+    # JS: nl = round((NT / tpl)*100)/100
+    if not math.isfinite(tpl) or tpl == 0:
+        nl = float("inf")
+        layers_ceil = 0
+    else:
+        nl = round((NT / tpl), 2)
+        layers_ceil = math.ceil(nl)
+
+    # JS: IDf = round(ID - ceil(nl)*(WG*2), 3)
+    IDf_mm = round(ID_mm - layers_ceil * (WG_mm * 2.0), 3)
+    # JS: ODf = (OD + ceil(nl)*(WG*2))
+    ODf_mm = round(OD_mm + layers_ceil * (WG_mm * 2.0), 3)
+    # JS: HTf = (HT + ceil(nl)*(WG*2))
+    HTf_mm = round(HT_mm + layers_ceil * (WG_mm * 2.0), 3)
+
+    return {
+        "Length per turn (mm)": round(len_per_turn_mm, 3),
+        "Total length Millimetres": round(total_len_mm, 3),
+        "Total length Meters": round(total_len_m, 6),
+        "Total length Feet": round(total_len_ft, 3),
+        "Turns per layer at wire pitch": ("Infinity" if not math.isfinite(tpl) else tpl),
+        "Number of layers": ("Infinity" if not math.isfinite(nl) else nl),
+        "Theoretical Finished Outside Diameter \"OD\"": ODf_mm,
+        "Theoretical Finished Inner Diameter \"ID\"": IDf_mm,
+        "Theoretical Finished Height \"HT\"": HTf_mm,
+    }
+
 
 st.set_page_config(page_title="토로이드 코일 설계", layout="wide")
 st.title("토로이드 코일 설계 프로그램")
@@ -111,9 +153,11 @@ with st.sidebar:
     # 고정 소스: 리포지토리 CSV (창성코어)
     repo_csv_path = Path(__file__).resolve().parent / "TalkFile_창성코어(High Flux GT Cores).xlsx - Hight Flux GT Cores.csv"
     uploaded = None
+    # app_streamlit.py (sidebar)
     L_uH = st.number_input("목표 인덕턴스 (µH)", min_value=0.1, value=250.0, step=10.0)
-    enamel_um = st.number_input("에나멜 두께 (µm, 절연 단면 두께)", min_value=0.0, value=12.0, step=1.0)
-    top_k = st.slider("상위 K", min_value=1, max_value=100, value=20)
+    enamel_um = st.number_input("에나멜 두께 (µm)", min_value=0.0, value=12.0, step=1.0)
+    mu_r_input = st.number_input("상대 투자율 μ_r", min_value=1.0, value=60.0, step=1.0)
+    # top_k = st.slider("상위 K", min_value=1, max_value=100, value=20)
 
 tab1, tab2 = st.tabs(["결과 (Results)", "CSV 미리보기 (Preview)"]) 
 
@@ -183,29 +227,61 @@ if cores:
             "코어 (Core)": d.core.name,
             "코일 (Coil)": d.coil.name,
             "턴수 (Turns)": d.turns,
-            "코어 내경(mm) (Core_ID_mm)": (getattr(d.core, "id_m", None) or 0.0) * 1e3,
-            "인덕턴스(H) (L_H)": d.L_h,
-            "오차(%) (Error_%)": d.rel_error*100,
-            "와이어 길이(m) (Wire_m)": d.wire_length_m,
-            "저항(Ω) (R_ohm)": d.resistance_ohm,
-            "비용(USD) (Cost_usd)": d.cost_usd,
-            "점수 (Score)": d.score,
-            "유효 와이어 직경(mm) (EffWire_d_mm)": (d.coil.wire_diameter_m + 2*d.coil.enamel_thickness_m) * 1e3,
-            "윈도우 면적(mm²) (WindowArea)": d.window_area_m2 * 1e6,
-            "남은 면적(mm²) (Leftover)": d.leftover_window_area_m2 * 1e6,
-            "필 비율(%) (FillRatio)": d.fill_ratio * 100,
-        } for d in opts[:top_k]])
+            "윈도우 면적(mm²)": d.window_area_m2 * 1e6,
+            "남은 면적(mm²)": d.leftover_window_area_m2 * 1e6,
+            "필 비율(%)": d.fill_ratio * 100,
+        } for d in opts[:5]])
         st.dataframe(df, use_container_width=True)
 
         csv_download = df.to_csv(index=False).encode('utf-8')
         st.download_button("결과 CSV 다운로드 (Download Results CSV)", data=csv_download, file_name="toroid_options.csv", mime="text/csv")
 
-    with tab2:
-        st.subheader("CSV 미리보기 (Preview)")
-        if rows_df is not None:
-            st.dataframe(rows_df, use_container_width=True)
-        else:
-            st.info("미리보기를 위해 CSV를 업로드하세요.")
+        # --- IWM detail (simple view) ---
+        st.markdown("### IWM 상세 계산 (행 선택)")
+
+        if opts:
+            labels = [f"{i}: {d.core.name} | {d.coil.name} | N={d.turns}" for i, d in enumerate(opts)]
+            row_idx = st.selectbox("Select row", options=list(range(len(opts))), format_func=lambda i: labels[i], index=0)
+            d = opts[row_idx]
+
+            # After-finish core dims (mm)
+            core = d.core
+            if getattr(core, "od_m", None) and getattr(core, "id_m", None) and getattr(core, "ht_m", None):
+                OD_mm, ID_mm, HT_mm = core.od_m*1e3, core.id_m*1e3, core.ht_m*1e3
+            else:
+                derived = core._derive_dimensions_from_fields() or (0.0, 0.0, 0.0)
+                od_m, id_m, ht_m = derived
+                OD_mm, ID_mm, HT_mm = od_m*1e3, id_m*1e3, ht_m*1e3
+
+            # Wire Size (overall, mm)
+            wire_size_mm = (d.coil.wire_diameter_m + 2*d.coil.enamel_thickness_m) * 1e3
+
+            # IWM calcs (use the helper you added earlier)
+            calc = iwm_calc(OD_mm, ID_mm, HT_mm, d.turns, wire_size_mm)
+
+            st.markdown("#### IWM details")
+            st.write({
+                "Core": d.core.name,
+                "Coil": d.coil.name,
+                "Turns": d.turns,
+                "Wire Size (mm)": f"{wire_size_mm:.3f}",
+                "Length per turn (mm)": calc["Length per turn (mm)"],
+                "Total length (mm)": calc["Total length Millimetres"],
+                "Total length (m)": calc["Total length Meters"],
+                "Total length (ft)": calc["Total length Feet"],
+                "Turns per layer (at pitch)": calc["Turns per layer at wire pitch"],
+                "Number of layers": calc["Number of layers"],
+                'Finished OD (mm)': calc['Theoretical Finished Outside Diameter "OD"'],
+                'Finished ID (mm)': calc['Theoretical Finished Inner Diameter "ID"'],
+                'Finished HT (mm)': calc['Theoretical Finished Height "HT"'],
+            })
+
+    # with tab2:
+    #     st.subheader("CSV 미리보기 (Preview)")
+    #     if rows_df is not None:
+    #         st.dataframe(rows_df, use_container_width=True)
+    #     else:
+    #         st.info("미리보기를 위해 CSV를 업로드하세요.")
 else:
     with tab1:
         st.info("리포지토리 CSV가 필요합니다. 파일을 프로젝트 루트에 두고 다시 실행하세요.")
