@@ -491,13 +491,12 @@ with st.sidebar:
     enamel_thk_m = 0.0                         # no enamel column → 0
     st.caption(f"Wire Size (overall pitch): {wire_size_mm:.3f} mm (bare only)")
 
-tab1, tab2 = st.tabs(["결과 (Results)", "CSV 미리보기 (Preview)"])
+tab1 = st.container()
 
 cores, rows_df = load_repo_cores()
 if not cores:
     with tab1:
         st.info("리포지토리 CSV가 필요합니다. 파일을 프로젝트 루트에 두고 다시 실행하세요.")
-    with tab2:
         st.info("CSV 업로드를 기다리는 중…")
     st.stop()
 
@@ -542,10 +541,7 @@ with tab1:
             "필 비율(%)": d.fill_ratio * 100,
         } for d in opts[:3]])
         st.dataframe(df, use_container_width=True)
-        csv_download = df.to_csv(index=False).encode("utf-8")
-        st.download_button("결과 CSV 다운로드 (Download Results CSV)", data=csv_download, file_name="toroid_options.csv", mime="text/csv")
 
-        # Simple IWM detail for a selected row
         st.markdown("### IWM 상세 계산 (행 선택)")
         labels = [f"{i}: {d.core.name} | {d.coil.name} | N={d.turns}" for i, d in enumerate(opts)]
         row_idx = st.selectbox("Select row", options=list(range(len(opts))), format_func=lambda i: labels[i], index=0)
@@ -682,9 +678,3 @@ with tab1:
                 else:
                     st.warning("No viable combination for the custom core with current inputs.")
 
-with tab2:
-    st.subheader("CSV 미리보기 (After-finish 치수 사용)")
-    if rows_df is not None and not rows_df.empty:
-        st.dataframe(rows_df, use_container_width=True)
-    else:
-        st.info("미리보기를 위해 CSV가 필요합니다.")
